@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Title</title>
+</head>
+
+<body>
+
+    <div style="padding: 20px;">
+        <input type="text" id="urlInput" placeholder="Introduce la URL que quieres scrapear"
+            style="width: 60%; padding: 8px;">
+        <br><br>
+        <input type="text" id="csvDirInput" placeholder="Ruta absoluta para guardar el CSV"
+            style="width: 60%; padding: 8px;">
+        <br><br>
+        <button onclick="startScraping()" style="padding: 8px 16px;">Cargar</button>
+    </div>
+
+
+
+    <script>
+        //Contenedor que se quiere scrapear, en este caso el de reviews, identificado por su lista de clases.
+        let marcador = "styles_reviewListContainer__2bg_p";
+
+        function startScraping() {
+            const inputUrl = document.getElementById('urlInput').value;
+            if (!inputUrl) {
+                alert("Por favor, introduce una URL.");
+                return;
+            }
+
+            //Eliminar HTML anterior
+            document.querySelectorAll('.marcador1, .contenedor-html').forEach(el => el.remove());
+
+            fetch('http://localhost:3000/set-url', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: inputUrl })
+            })
+                .then(res => {
+                    if (!res.ok) throw new Error("Error al enviar URL");
+                    getUrl('http://localhost:3000/proxy');
+                })
+                .catch(err => console.error("Error:", err));
+        }
+
+
+        //Conseguir el html.
+        function getUrl(url) {
+            fetch(url)
+                .then(response => response.text())
+                .then(html => {
+                    //Container de los divs.
+                    const container = document.createElement('div');
+                    //Para al recargar borrar todo.
+                    container.classList.add('contenedor-html');
+                    container.style.display = 'flex';
+                    container.style.flexDirection = 'column';
+                    container.style.gap = '20px';
+                    //Div para el html conseguido.
+                    const div1 = document.createElement('div');
+                    div1.classList.add("marcador1");
+                    div1.style.width = '100%';
+                    div1.innerHTML = html;
+                    //Div para el botón para ocultar lo no seleccionado.
+                    const div2 = document.createElement('div');
+                    div2.style.width = '100%';
+                    div2.style.textAlign = 'center';
+                    div2.style.padding = '10px';
+                    //Meter los divs en el container y el container en el body.
+                    container.appendChild(div1);
+                    container.appendChild(div2);
+                    document.body.appendChild(container);
+                    //Incrustar los checkboxes.
+                    añadirCheckboxes(div1, div2);
+                })
+                .catch(error => console.error('Error al obtener el HTML:', error));
+        }
+        //Incrusta los checkbox en los elementos html más profundos.
+        function añadirCheckboxes(sourceDiv, targetDiv) {
+            //Sacar los elementos del contenedor de reseñas(identificado por la lista de clases "marcador").
+            const reviewContainer = sourceDiv.querySelector(`.${marcador}`);
+            const allElements = reviewContainer.querySelectorAll('*');
+            //Mapa para rastrear las clases únicas y mostrar solo un checkbox.
+            const seenClasses = new Set();
+
+            //Para cada elemento(el):
+            allElements.forEach((el, index) => {
+                //Si todos los hijos del elemento, pasados a array, no son elementos html:
+                if ([...el.children].every(child => child.nodeType !== 1)) {
+                    //El tagName vale para los elementos que no tienen clases, porque estaban dando problemas.
+                    const clasesRef = [el.tagName, ...el.classList].sort().join(' ');
+                    //Si las clases ya fueron vistas, no añadir un checkbox visible aquí.
+                    const isFirstOccurrence = !seenClasses.has(clasesRef);
+                    seenClasses.add(clasesRef);
+                    //Incrustar el checkbox.
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.classList.add('check');
+                    //Indice del elemento.
+                    checkbox.dataset.index = index;
+                    //Hacerlo visible solo para el primer elemento de este grupo.
+                    if (!isFirstOccurrence) {
+                        checkbox.style.display = 'none';
+                    }
+
+                    //Eventlistener para cuando se marque/desmarque el checkbox.
+                    checkbox.addEventListener('change', function () {
+                        //Coger las clases y ordenarlas para que se compare bien.
+                        const clasesRef = el.classList.value.split(' ').sort().join(' ');
+                        //Comparar con todos los demás elementos html para buscar los que sean iguales.
+                        reviewContainer.querySelectorAll('*').forEach(otherEl => {
+                            //Ver si son del mismo tipo.
+                            const mismoTipo = el.tagName === otherEl.tagName;
+                            //Si son iguales(mismas clases) y son del mismo tipo:
+                            if (mismoTipo && otherEl.classList.value.split(' ').sort().join(' ') === clasesRef) {
+                                //Si el elemento es una imagen el checkbox se busca en el padre.
+                                const otherCheckbox = otherEl.parentNode.querySelector('input.check');
+                                //Si se marca/desmarca el checkbox se marcan/desmarcan todos los elementos iguales.
+                                if (otherCheckbox) {
+                                    otherCheckbox.checked = this.checked;
+                                }
+                                //Cambiar el fondo para que se note lo que está seleccionado.
+                                otherEl.style.backgroundColor = this.checked ? 'lightgray' : '';
+                                if (this.checked) {
+                                    otherEl.classList.add('checked');
+                                } else {
+                                    otherEl.classList.remove('checked');
+                                }
+                            }
+                        });
+                    });
+
+                    //Si el elemento es una imagen, insertar el checkbox en le padre.
+                    if (el.tagName === 'IMG') {
+                        el.parentNode.insertBefore(checkbox, el);
+                    } else {
+                        el.prepend(checkbox);
+                    }
+
+                }
+            });
+
+            //Crear el botón para ocultar lo no seleccionado.
+            const botonOcultar = document.createElement('button');
+            //Ponerlo "bonito".
+            botonOcultar.textContent = 'Obtener elementos';
+            botonOcultar.style.padding = '10px 20px';
+            botonOcultar.style.fontSize = '16px';
+            botonOcultar.style.cursor = 'pointer';
+            botonOcultar.addEventListener('click', obtenerClasesDeSeleccionados);
+            targetDiv.appendChild(botonOcultar);
+        }
+
+        function obtenerClasesDeSeleccionados() {
+            const clasesUnicas = new Set();
+
+            document.querySelectorAll('.marcador1 .checked').forEach(element => {
+                const clasesFiltradas = Array.from(element.classList).filter(clase => clase !== 'checked');
+                let claseString;
+                if (clasesFiltradas.length > 0) {
+                    //Aquí concatenamos tagName + clases ordenadas.
+                    claseString = element.tagName + " " + clasesFiltradas.sort().join(' ');
+                } else {
+                    //Si no hay clases, solo tagName.
+                    claseString = element.tagName;
+                }
+                clasesUnicas.add(claseString);
+            });
+
+            const clases = Array.from(clasesUnicas);
+
+            const rutaCsv = document.getElementById("csvDirInput").value.trim();
+
+            fetch('http://localhost:3000/enviar-a-python', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    clases: clases,
+                    directorio: rutaCsv
+                })
+            })
+                .then(res => res.json())
+                .then(data => console.log("Respuesta del servidor:", data))
+                .catch(err => console.error("Error:", err));
+        }
+
+        //La URL del proxy.
+        //getUrl('http://localhost:3000/proxy');
+    </script>
+</body>
+
+</html>
