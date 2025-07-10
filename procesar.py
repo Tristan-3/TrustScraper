@@ -81,7 +81,6 @@ for fila in resultados:
 todas_las_claves = sorted(todas_las_claves)
 
 #Guardar en CSV
-csv_path = "./resultados.csv"
 with open(csv_path, 'w', newline='', encoding='utf-8') as f:
     writer = csv.DictWriter(f, fieldnames=todas_las_claves)
     writer.writeheader()
